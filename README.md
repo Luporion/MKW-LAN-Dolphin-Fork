@@ -130,3 +130,12 @@ Check the RMCX.log on the root of the SD card. This tells you if files can't be 
 
 - Game loads, but I get "An error has occured. Press the EJECT button, ..." \
 This is often when a license has been used before on different server. Please delete it and play from a fresh license.
+
+
+## TODO
+
+- Add explanation about variable module_path in /src/brainslug-wii-vanilla/src/modules/module.c. This way, you can change were Brainslug looks voor modules and easily make different folders for different mods.
+- Look at C0ons pull request to enable pre built iso (eliminate Emvolution / Kamek / GCT) (USB loading in general gave errors in past)
+- Look at C00ns repo to see if we can put cheats inside Lan mod module itself (eliminate GCT loader module)
+- Look at loading LE-CODE with dedicated Geckocode (Eliminate Kamek Loader ) (gave errors in past)
+  
