@@ -134,8 +134,8 @@ This is often when a license has been used before on different server. Please de
 
 ## TODO
 
-- Add explanation about variable module_path in /src/brainslug-wii-vanilla/src/modules/module.c. This way, you can change were Brainslug looks voor modules and easily make different folders for different mods.
-- Look at C0ons pull request to enable pre built iso (eliminate Emvolution / Kamek / GCT) (USB loading in general gave errors in past)
-- Look at C00ns repo to see if we can put cheats inside Lan mod module itself (eliminate GCT loader module)
+- Add explanation about variable module_path in [module.c] /src/brainslug-wii-vanilla/src/modules/module.c. This way, you can change were Brainslug looks voor modules and easily make different folders for different mods.
+- Look at TheC0ne's pull request to enable pre built iso (eliminate Emvolution / Kamek / GCT) (USB loading in general gave errors in past)
+- Look at TheC0ne repo to see if we can put cheats inside Lan mod module itself (eliminate GCT loader module)
 - Look at loading LE-CODE with dedicated Geckocode (Eliminate Kamek Loader ) (gave errors in past)
   
