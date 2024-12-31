@@ -131,6 +131,9 @@ Check the RMCX.log on the root of the SD card. This tells you if files can't be 
 - Game loads, but I get "An error has occured. Press the EJECT button, ..." \
 This is often when a license has been used before on different server. Please delete it and play from a fresh license.
 
+- Stuck on "Saving... Please do not push the POWER button or RESET" \
+This somethimes occurs when there is no LICENSE. Please open a vanilla ISO/Disc of MK Wii and create a license. 
+
 
 ## TODO
 
