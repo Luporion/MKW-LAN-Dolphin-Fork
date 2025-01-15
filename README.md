@@ -141,4 +141,8 @@ This somethimes occurs when there is no LICENSE. Please open a vanilla ISO/Disc 
 - Look at TheC0ne's pull request to enable pre built iso (eliminate Emvolution / Kamek / GCT) (USB loading in general gave errors in past)
 - Look at TheC0ne repo to see if we can put cheats inside Lan mod module itself (eliminate GCT loader module) [TheC0ne repo](https://github.com/TheC0ne/MKW-LAN-Brainslug/blob/master/src/brainslug-wii-vanilla/modules/rmc-local-net/main.c)
 - Look at loading LE-CODE with dedicated Geckocode (Eliminate Kamek Loader ) (gave errors in past)
+- QoL Cheat Code tests:
+      - Test silent controller changing code (https://mariokartwii.com/showthread.php?tid=164)
+      - Auto forward to friends menu (https://mariokartwii.com/showthread.php?tid=1361)
+      - Show time after race (https://mariokartwii.com/showthread.php?tid=1609) (not sure if works in Friend Room)
   
