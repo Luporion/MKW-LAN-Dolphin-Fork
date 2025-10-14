@@ -1,0 +1,64 @@
+
+Discarded input sections
+
+ .text          0x00000000        0x0 build/output.elf
+ .eh_frame      0x00000000       0x68 build/output.elf
+ .data          0x00000000        0x0 build/output.elf
+ .bss           0x00000000        0x0 build/output.elf
+ .comment       0x00000000       0x26 build/output.elf
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+LOAD build/output.elf
+
+.bslug.meta     0x00000000       0x7e
+ *(.bslug.meta*)
+ .bslug.meta    0x00000000       0x7e build/output.elf
+                0x00000000                bslug_meta
+                0x00000000                bslug_meta_license
+                0x0000000c                bslug_meta_author
+                0x0000003c                bslug_meta_version
+                0x0000004c                bslug_meta_bslug
+                0x00000058                bslug_meta_name
+                0x00000074                bslug_meta_game
+
+.bslug.load     0x00000080       0x18
+ *(.bslug.load*)
+ .bslug.load    0x00000080       0x18 build/output.elf
+                0x00000080                bslug_load
+                0x00000080                bslug_load_OSLink
+                0x0000008c                bslug_load__start
+
+.text           0x00000098      0x110
+ *(.text*)
+ .text._start_gecko
+                0x00000098       0x70 build/output.elf
+ .text.OSLink_patches
+                0x00000108       0xa0 build/output.elf
+
+.data
+ *(.data*)
+
+.rodata         0x000001a8     0x10f4
+ *(.rodata*)
+ .rodata.OSLink_patches.str1.4
+                0x000001a8       0x1d build/output.elf
+ *fill*         0x000001c5        0x3 
+ .rodata.str1.4
+                0x000001c8        0xf build/output.elf
+ *fill*         0x000001d7        0x1 
+ .rodata.codehandler
+                0x000001d8     0x10c4 build/output.elf
+
+.bss            0x0000129c       0x50
+ *(.bss*)
+ .bss.fs.0      0x0000129c       0x50 build/output.elf
+
+/DISCARD/
+ *(*)
+OUTPUT(source.mod elf32-powerpc)
