@@ -5,7 +5,8 @@ It loads the game differently from v1.02, which is the one from Chadderz officia
 
 However, in v1.03 they changed some mxml stuff which needs to be reverted. Lammy did this for me. Thx
 
-
+To change the path that Brainslug loads it modules from (i.e. to make different apps in homebrew to load different mods of the same game):
+open src/modules/module.c and edit module_path[] (line 83)
 
 # ORIGINAL README:
 BrainSlug Wii
