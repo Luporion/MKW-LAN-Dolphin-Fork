@@ -8,6 +8,14 @@ However, in v1.03 they changed some mxml stuff which needs to be reverted. Lammy
 To change the path that Brainslug loads it modules from (i.e. to make different apps in homebrew to load different mods of the same game):
 open src/modules/module.c and edit module_path[] (line 83)
 
+To build, run following commands from MSYS2
+- make clean & make -C modules clean
+- make install
+- make
+- make release
+
+
+
 # ORIGINAL README:
 BrainSlug Wii
     by Chadderz
