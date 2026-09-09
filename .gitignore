@@ -1,0 +1,9 @@
+# Build output
+**/build/
+**/bin/*.dol
+**/bin/*.elf
+**/bin/*.map
+
+# Temporary files
+*.o
+*.d
