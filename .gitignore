@@ -7,3 +7,5 @@
 # Temporary files
 *.o
 *.d
+
+**/bin/*.mod

@@ -203,17 +203,40 @@ static bool compute_and_broadcast_status(so_fd_t fd) {
 	return true;
 }
 
-static int find_or_alloc_peer(const so_addr_t *ip) {
-	if (ip->sa_addr == local_ip) return -1;
-	for (int i = 0; i < BROADCAST_TRACK_MAX; i++) {
-		if (tracked_peers[i].info.ip == ip->sa_addr) {
-			return i;
-		} else if (tracked_peers[i].info.ip == 0) {
-			tracked_peers[i].info.ip = ip->sa_addr;
-			return i;
-		}
-	}
-	return -1;
+static int find_or_alloc_peer(const so_addr_t *ip, uint32_t pid) {
+    /*
+     * Ignore only our own advertisement.
+     *
+     * The original LAN mod ignored every packet coming from our own IP.
+     * That works for separate Wiis, but prevents multiple Dolphin instances
+     * on the same PC from discovering each other.
+     */
+    if (pid == 0 || pid == my_fake_pid)
+        return -1;
+
+    /*
+     * Identify an existing peer by its PID rather than its IP address.
+     * Multiple Dolphin instances can share the same host IP.
+     */
+    for (int i = 0; i < BROADCAST_TRACK_MAX; i++) {
+        if (tracked_peers[i].real_pid == pid) {
+            tracked_peers[i].info.ip = ip->sa_addr;
+            return i;
+        }
+    }
+
+    /*
+     * Allocate a new peer slot.
+     */
+    for (int i = 0; i < BROADCAST_TRACK_MAX; i++) {
+        if (tracked_peers[i].info.ip == 0) {
+            tracked_peers[i].info.ip = ip->sa_addr;
+            tracked_peers[i].real_pid = pid;
+            return i;
+        }
+    }
+
+    return -1;
 }
 static int find_peer_by_fake_pid(uint32_t fake_pid) {
 	if (fake_pid == 0) return -1;
@@ -233,7 +256,7 @@ static int find_peer_by_pid(uint32_t pid) {
 
 static void process_broadcast(const struct broadcast_packet buffer, const so_addr_t raddr) {
 	if (buffer.magic != BROADCAST_MAGIC) return;
-	int peer = find_or_alloc_peer(&raddr);
+	int peer = find_or_alloc_peer(&raddr, buffer.pid);
 	if (peer == -1) return;
 	tracked_peers[peer].last_update = timestamp;
 	tracked_peers[peer].real_pid = buffer.pid;
