@@ -15,6 +15,7 @@
 
 // port to do udp advertisement on
 #define BROADCAST_PORT 27900
+#define BROADCAST_PORT_COUNT 30 // added for local network discovery
 #define BROADCAST_INTERVAL 60
 #define BROADCAST_TIMEOUT (BROADCAST_INTERVAL * 5)
 #define BROADCAST_MAGIC (('R' << 24) | ('M' << 16) | ('C' << 8) | 'X')
@@ -32,6 +33,7 @@ bool network_thread_running;
 static uint64_t timestamp;
 static so_fd_t broadcast_socket;
 static int broadcast_timer;
+static uint16_t broadcast_port; // added for local network discovery
 static int8_t game_state; // 1 is idling
 static uint16_t communication_port;
 static const uint8_t *my_mii;
@@ -50,6 +52,7 @@ static so_ret_t set_nonblock(so_fd_t fd) {
 static struct tracked_peer {
 	uint64_t last_update;
 	uint32_t real_pid;
+	uint16_t control_port;
 	struct peer_info info;
 	uint16_t longitude;
 	uint16_t latitude;
@@ -74,16 +77,30 @@ static bool initialise(void) {
 		return false;
 	}
 
-	const so_addr_t baddr = {
+	so_addr_t baddr = {
 		.sa_len = sizeof(so_addr_t),
 		.sa_family = AF_INET,
-		.sa_port = BROADCAST_PORT,
+		.sa_port = 0,
 		.sa_addr = 0
 	};
 
-	so_ret_t r = SOBind(broadcast_socket, &baddr);
+	so_ret_t r = -1;
+
+	for (int i = 0; i < BROADCAST_PORT_COUNT; i++) {
+		baddr.sa_port = BROADCAST_PORT + i;
+
+		r = SOBind(broadcast_socket, &baddr);
+
+		if (r >= 0) {
+			broadcast_port = baddr.sa_port;
+			LOG_INFO("broadcast socket bound to port %u",
+				(unsigned)broadcast_port);
+			break;
+		}
+	}
+
 	if (r < 0) {
-		LOG_ERROR("SOBind returned %d", r);
+		LOG_ERROR("could not bind any broadcast port");
 		return false;
 	}
 
@@ -193,13 +210,17 @@ static bool compute_and_broadcast_status(so_fd_t fd) {
 		packet.country = my_country;
 		packet.state = my_state;
 	}
-	const so_addr_t baddr = {
+	so_addr_t baddr = {
 		.sa_len = sizeof(so_addr_t),
 		.sa_family = AF_INET,
 		.sa_port = BROADCAST_PORT,
 		.sa_addr = 0xffffffff
 	};
-	SOSendTo(fd, &packet, sizeof(packet), 0, &baddr);
+
+	for (int i = 0; i < BROADCAST_PORT_COUNT; i++) {
+		baddr.sa_port = BROADCAST_PORT + i;
+		SOSendTo(fd, &packet, sizeof(packet), 0, &baddr);
+	}
 	return true;
 }
 
@@ -258,6 +279,7 @@ static void process_broadcast(const struct broadcast_packet buffer, const so_add
 	if (buffer.magic != BROADCAST_MAGIC) return;
 	int peer = find_or_alloc_peer(&raddr, buffer.pid);
 	if (peer == -1) return;
+	tracked_peers[peer].control_port = raddr.sa_port;
 	tracked_peers[peer].last_update = timestamp;
 	tracked_peers[peer].real_pid = buffer.pid;
 	tracked_peers[peer].info.communication_port = buffer.communication_port;
@@ -441,7 +463,11 @@ bool network_thread_send_status_record(int type, uint32_t pid, uint32_t ip, uint
 		LOG_ERROR("network_thread_send_status_record to peer with no ip");
 		return false;
 	}
-	LOG_INFO("network_thread_send_status_record %d to %x:%u", type, (unsigned)tracked_peers[peer].info.ip, (unsigned)tracked_peers[peer].info.communication_port);
+	if (tracked_peers[peer].control_port == 0) {
+		LOG_ERROR("network_thread_send_status_record to peer with no control port");
+		return false;
+	}
+	LOG_INFO("network_thread_send_status_record %d to %x:%u", type, (unsigned)tracked_peers[peer].info.ip, (unsigned)tracked_peers[peer].control_port);
 
 	uint32_t full_packet[packet_len_in_words + 5];
 	for (int i = 0; i < packet_len_in_words; i++)
@@ -455,7 +481,7 @@ bool network_thread_send_status_record(int type, uint32_t pid, uint32_t ip, uint
 	const so_addr_t daddr = {
 		.sa_len = sizeof(so_addr_t),
 		.sa_family = AF_INET,
-		.sa_port = BROADCAST_PORT,
+		.sa_port = tracked_peers[peer].control_port,
 		.sa_addr = tracked_peers[peer].info.ip
 	};
 	so_ret_t r = SOSendTo(broadcast_socket, &full_packet, sizeof(full_packet), 0, &daddr);
