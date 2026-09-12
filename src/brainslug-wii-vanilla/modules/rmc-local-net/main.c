@@ -39,9 +39,9 @@
 /* Which game to support. ? is a wild card (e.g. RMC? is any version of Mario
  * Kart Wii) */
 BSLUG_MODULE_GAME("RMC?");
-BSLUG_MODULE_NAME("MKW LAN multiplayer");
-BSLUG_MODULE_VERSION("v0.9");
-BSLUG_MODULE_AUTHOR("Chadderz and MrBean35000vr");
+BSLUG_MODULE_NAME("MKW LAN multiplayer (Luporion)");
+BSLUG_MODULE_VERSION("v0.9-Luporion.2");
+BSLUG_MODULE_AUTHOR("Chadderz and MrBean35000vr; modified by Luporion");
 BSLUG_MODULE_LICENSE("BSD");
 
 extern void _start(void);
@@ -183,6 +183,30 @@ static void setup_pid(struct dwc_gamedata *gamedata) {
 	gamedata->gamedata2->my_pid = my_fake_pid;
 	pid_struct.pid = my_fake_pid;
 	pid_struct.game_id = 0x524D434A; // RMCJ
+}
+
+/* Called once per LAN login after the control socket has been bound.
+ * Dolphin instances can start with identical emulated timer values. Reserve
+ * five PID bits for the port offset (0..29), so those instances still differ.
+ * The remaining timer bits reduce collisions between different machines.
+ * Bit 30 keeps the PID above friend aliases 1..30 and below INT32_MAX.
+ * This is a session identifier, not a persistent friend code. */
+void mkw_setup_lan_pid(uint16_t control_port) {
+	static uint32_t pid_base;
+	if (pid_base == 0) {
+		uint64_t now = OSGetTime();
+		uint32_t seed = (uint32_t)now ^ (uint32_t)(now >> 32) ^ SOGetHostID();
+		/* Mix low IP/timer bits before reserving five bits for the port. */
+		seed ^= seed >> 16;
+		seed *= 0x7feb352d;
+		seed ^= seed >> 15;
+		pid_base = 0x40000000 | (seed & 0x3fffffe0);
+	}
+	/* Keep the PID on reconnect when the port is unchanged. Otherwise the
+	 * other consoles would reserve another friend slot for the same player. */
+	my_fake_pid = pid_base |
+		((control_port - 27900) & 0x1f);
+	setup_pid(get_dwc_gamedata());
 }
 
 static void on_populate_friend(struct menu_friend_list_friend *friend, void *save_file_license, int index) {

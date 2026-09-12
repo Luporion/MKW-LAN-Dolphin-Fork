@@ -1,6 +1,7 @@
 
 #include "network_thread.h"
 
+#include <bslug.h>
 #include <fcntl.h>
 #include <rvl/dwc.h>
 #include <rvl/OSTime.h>
@@ -13,13 +14,18 @@
 #include "port_addresses.h"
 #include "processor.h"
 
-// port to do udp advertisement on
+/* Keep 27900 as the first port for Wii consoles. Extra ports allow Dolphin
+ * instances on one PC to bind separate sockets without changing the packet. */
 #define BROADCAST_PORT 27900
-#define BROADCAST_PORT_COUNT 30 // added for local network discovery
 #define BROADCAST_INTERVAL 60
 #define BROADCAST_TIMEOUT (BROADCAST_INTERVAL * 5)
 #define BROADCAST_MAGIC (('R' << 24) | ('M' << 16) | ('C' << 8) | 'X')
-#define BROADCAST_TRACK_MAX 30
+
+/* The original friend list has 30 slots. This is a discovery limit,
+ * not the race limit: a race still has at most 12 players. */
+#define MAX_LAN_PEERS 30
+#define BROADCAST_PORT_COUNT MAX_LAN_PEERS
+#define BROADCAST_TRACK_MAX MAX_LAN_PEERS
 
 #define STATUS_MAGIC 0xbb49cc4d
 #define STATUS_SIZE_MAX 512
@@ -31,11 +37,12 @@ uint32_t local_ip;
 bool network_thread_running;
 
 static uint64_t timestamp;
-static so_fd_t broadcast_socket;
+static so_fd_t broadcast_socket = -1;
 static int broadcast_timer;
-static uint16_t broadcast_port; // added for local network discovery
+static uint16_t broadcast_port;
 static int8_t game_state; // 1 is idling
 static uint16_t communication_port;
+static bool initialising_game_socket;
 static const uint8_t *my_mii;
 static uint16_t my_longitude;
 static uint16_t my_latitude;
@@ -61,10 +68,35 @@ static struct tracked_peer {
 	uint8_t mii[MII_SIZE];
 } tracked_peers[BROADCAST_TRACK_MAX];
 
+/* DWC picks a random game port. On a PC that port may already belong to
+ * another application, or Windows may reserve it without opening a socket.
+ * Retry the failed bind with port 0: IOS/Dolphin chooses and binds a free port
+ * in one operation. No separate "probe then close" race, no DWC reinitialising.
+ * Only the game-socket setup on our own thread is affected. In particular,
+ * discovery must stay inside 27900..27929 so the other consoles can find us.
+ * BSLUG calls to SOBind below refer to the original function, not this hook. */
+static so_ret_t lan_game_SOBind(so_fd_t fd, const so_addr_t *addr) {
+	so_ret_t result = SOBind(fd, addr);
+	if (result >= 0 || !initialising_game_socket ||
+		OSGetCurrentThread() != &network_thread || fd == broadcast_socket ||
+		addr == NULL || addr->sa_family != AF_INET || addr->sa_port == 0)
+		return result;
+
+	so_addr_t fallback = *addr;
+	fallback.sa_port = 0;
+	LOG_WARN("game port %u bind failed (%d); requesting a free port",
+		(unsigned)addr->sa_port, (int)result);
+	result = SOBind(fd, &fallback);
+	if (result < 0)
+		LOG_ERROR("automatic game port bind failed (%d)", (int)result);
+	return result;
+}
+
 static bool initialise(void) {
 	if (game_state != 0)
 		LOG_INFO("game_state %d -> 0", (int)game_state);
 	game_state = 0;
+	broadcast_timer = BROADCAST_INTERVAL;
 	local_ip = SOGetHostID();
 	if (local_ip == 0) {
 		LOG_ERROR("SOGetHostID returned 0");
@@ -110,14 +142,32 @@ static bool initialise(void) {
 		return false;
 	}
 
+	/* The bound port distinguishes simultaneous instances on the same PC.
+	 * Set the final PID before creating the game socket or advertising it. */
+	mkw_setup_lan_pid(broadcast_port);
+	LOG_INFO("local peer pid=%u ip=%x control=%u", (unsigned)my_fake_pid,
+		(unsigned)local_ip, (unsigned)broadcast_port);
+
+	initialising_game_socket = true;
 	r = dwc_init_gt2_socket();
+	initialising_game_socket = false;
 	if (r != 0) {
 		LOG_ERROR("dwc_init_gt2_socket returned %d", r);
 		return false;
 	}
 
 	struct dwc_gamedata *gamedata = get_dwc_gamedata();
-	communication_port = gamedata->gamedata2->socket->local_port;
+	/* Always advertise the port the socket actually owns, including fallback.
+	 * GT2 also obtains its endpoint with SOGetSockName during socket creation. */
+	so_addr_t game_addr = { .sa_len = sizeof(so_addr_t) };
+	r = SOGetSockName(gamedata->gamedata2->socket->socket, &game_addr);
+	if (r < 0 || game_addr.sa_port == 0) {
+		LOG_ERROR("could not read bound game port (%d)", (int)r);
+		return false;
+	}
+	communication_port = game_addr.sa_port;
+	gamedata->gamedata2->socket->local_port = communication_port;
+	LOG_INFO("game socket ready on port %u", (unsigned)communication_port);
 	gamedata->gamedata2->online_status = 3;
 
 	return true;
@@ -253,6 +303,8 @@ static int find_or_alloc_peer(const so_addr_t *ip, uint32_t pid) {
         if (tracked_peers[i].info.ip == 0) {
             tracked_peers[i].info.ip = ip->sa_addr;
             tracked_peers[i].real_pid = pid;
+            LOG_INFO("discovered peer pid=%u ip=%x control=%u", (unsigned)pid,
+                (unsigned)ip->sa_addr, (unsigned)ip->sa_port);
             return i;
         }
     }
@@ -277,6 +329,9 @@ static int find_peer_by_pid(uint32_t pid) {
 
 static void process_broadcast(const struct broadcast_packet buffer, const so_addr_t raddr) {
 	if (buffer.magic != BROADCAST_MAGIC) return;
+	/* IDs 1..30 are reserved for local friend-list aliases. */
+	if (buffer.pid <= BROADCAST_TRACK_MAX || raddr.sa_port == 0 ||
+		buffer.communication_port == 0) return;
 	int peer = find_or_alloc_peer(&raddr, buffer.pid);
 	if (peer == -1) return;
 	tracked_peers[peer].control_port = raddr.sa_port;
@@ -317,6 +372,7 @@ static void process_status(uint32_t *buffer, int32_t length, const so_addr_t rad
 	if (buffer[0] != STATUS_MAGIC) return;
 	LOG_INFO("receive status message %u from %x:%u", (unsigned)(buffer[2] >> 24), (unsigned)raddr.sa_addr, (unsigned)raddr.sa_port);
 	struct dwc_gamedata *gamedata = get_dwc_gamedata();
+	if (gamedata == NULL) return;
 	gamedata->public_ip = FAKE_PUBLIC_IP;
 	dwc_process_status_record(buffer[2] >> 24, __builtin_bswap32(buffer[4]), raddr.sa_addr, raddr.sa_port, buffer + 5, (buffer[2] >> 18) & 0x3f);
 }
@@ -374,7 +430,7 @@ void* network_thread_main(void *arg) {
 	LOG_INFO("network_thread startup");
 	if (!initialise()) {
 		mkw_net_state->connection_state = 5; // idk lol
-		return NULL;
+		goto cleanup;
 	}
 	LOG_INFO("network_thread initialised");
 	mkw_net_state->connection_state = 5;
@@ -389,6 +445,16 @@ void* network_thread_main(void *arg) {
 		check_for_status_or_broadcast();
 		VIWaitForRetrace();
 	}
+cleanup:
+	initialising_game_socket = false;
+	communication_port = 0;
+	/* Release the control port on normal exit AND on partial startup failure.
+	 * The GT2 socket belongs to DWC and is not closed here. */
+	if (broadcast_socket >= 0) {
+		SOClose(broadcast_socket);
+		broadcast_socket = -1;
+	}
+	broadcast_port = 0;
 	LOG_INFO("network_thread exit");
 	my_mii = 0;
 	for (int i = 0; i < BROADCAST_TRACK_MAX; i++)
@@ -444,6 +510,10 @@ void network_thread_after_server_join(struct dwc_gamedata *gamedata) {
 }
 
 bool network_thread_send_status_record(int type, uint32_t pid, uint32_t ip, uint16_t port, const uint32_t *packet, uint32_t packet_len_in_words) {
+	/* The wire header has one byte for the payload length (in bytes).
+	 * Bound the stack allocation too; never silently wrap that length. */
+	if (packet_len_in_words > 63 || (packet_len_in_words != 0 && packet == NULL) ||
+		broadcast_socket < 0) return false;
 	if (type == 2 || type == 6) {
 		struct dwc_gamedata *gamedata = get_dwc_gamedata();
 		gamedata->last_enter_type = type;
@@ -519,3 +589,5 @@ struct peer_info network_get_peer_info(unsigned int index) {
 	if (index >= BROADCAST_TRACK_MAX) return (struct peer_info) { };
 	return tracked_peers[index].info;
 }
+
+BSLUG_MUST_REPLACE(SOBind, lan_game_SOBind);

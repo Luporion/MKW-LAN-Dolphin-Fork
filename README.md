@@ -1,3 +1,31 @@
+# MKW LAN — Luporion Dolphin fork
+
+Modified version of the LAN Multiplayer mod by **MrBean35000vr and Chadderz**,
+based on **calvinhendriks/MKW-LAN-Brainslug**. This fork supports several Dolphin
+instances sharing one PC/IP and falls back to an automatically assigned game
+port when the requested port is occupied or reserved.
+
+Current release: **v0.9-Luporion.2**.
+
+- [Installation and build instructions](docs/DOLPHIN-SETUP.md)
+- [Tested scenarios, evidence and remaining limits](docs/TESTING.md)
+- [Release notes](RELEASE-NOTES.md)
+- [Download releases](https://github.com/Luporion/MKW-LAN-Dolphin-Fork/releases)
+
+Confirmed: two-instance racing (including split-screen), four instances in one
+room/race, two separate two-console rooms, and reconnection after an AFK disconnect.
+Six/twelve simultaneous instances, real Wii hardware and prolonged independent
+two-group racing remain to be tested. Use the same modified module on all devices.
+
+The release ZIP contains the LAN module only. The inherited `root_SD` and the
+guide below describe an older custom-track setup; they are not the tested vanilla
+Dolphin configuration. Use the instructions linked above for this fork and replace
+the LAN module with the release binary. Original credits and notices are preserved.
+
+---
+
+## Original integration guide (preserved)
+
 # Mario Kart Wii Custom Tracks in LAN mode through BrainSlug
 Basically, this github combines a few projects in order to play Mario Kart Wii (MKW) Custom Track Distributions in LAN mode. 
 This allows up to 12 players (2 per wii) to play together, no disc required! \

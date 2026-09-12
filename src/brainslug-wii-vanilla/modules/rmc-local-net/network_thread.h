@@ -17,6 +17,8 @@ struct peer_info {
 	int8_t status;
 };
 
+/* main.c keeps all DWC and menu copies of our session PID in sync. */
+void mkw_setup_lan_pid(uint16_t control_port);
 void* network_thread_main(void *arg);
 bool network_thread_get_fake_pid_status(uint32_t pid, uint8_t *status);
 void network_thread_after_server_setup(struct dwc_gamedata *gamedata);
